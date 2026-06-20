@@ -48,6 +48,26 @@ export default function LHDNPortalMock() {
   const [activeInvoice, setActiveInvoice] = useState<LHDNDocument | null>(null);
   const [newestId, setNewestId] = useState<string | undefined>(undefined);
 
+  // Parse URL parameters to highlight the newly uploaded document
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const highlight = params.get("highlight");
+      if (highlight) {
+        setNewestId(highlight);
+        setActiveTab("Documents");
+        
+        // Remove query parameters from address bar to keep URL clean
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, "", newUrl);
+        
+        // Clear glow after 6 seconds
+        const timer = setTimeout(() => setNewestId(undefined), 6000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, []);
+
   // Global Mock State
   const [metrics, setMetrics] = useState({
     submitted: 1204,
@@ -168,20 +188,49 @@ export default function LHDNPortalMock() {
 
   const renderActiveView = () => {
     switch (activeTab) {
-      case "Home": return <HomeView theme={theme} onNavigate={setActiveTab} />;
-      case "Dashboard": return <DashboardView theme={theme} metrics={metrics} />;
-      case "New Document": return <NewDocumentView theme={theme} onSubmit={handleNewSubmission} />;
-      case "Documents": return <DocumentsView theme={theme} documents={documents} newestId={newestId} onView={(doc) => { setActiveInvoice(doc); setActiveTab("Invoice Detail"); }} />;
-      case "Invoice Detail": return <InvoiceDetailView theme={theme} invoice={activeInvoice} onBack={() => setActiveTab("Documents")} />;
-      case "Submissions": return <SubmissionsView theme={theme} onBatchUpload={handleBatchUpload} />;
-      case "Visual Templates": return <VisualTemplatesView theme={theme} />;
-      case "Notifications": return <NotificationsView theme={theme} />;
+      case "Home": return <HomeView theme={theme} language={language} onNavigate={setActiveTab} />;
+      case "Dashboard": return <DashboardView theme={theme} language={language} metrics={metrics} />;
+      case "New Document": return <NewDocumentView theme={theme} language={language} onSubmit={handleNewSubmission} />;
+      case "Documents": return <DocumentsView theme={theme} language={language} documents={documents} newestId={newestId} onView={(doc) => { setActiveInvoice(doc); setActiveTab("Invoice Detail"); }} />;
+      case "Invoice Detail": return <InvoiceDetailView theme={theme} language={language} invoice={activeInvoice} onBack={() => setActiveTab("Documents")} />;
+      case "Submissions": return <SubmissionsView theme={theme} language={language} onBatchUpload={handleBatchUpload} />;
+      case "Visual Templates": return <VisualTemplatesView theme={theme} language={language} />;
+      case "Notifications": return <NotificationsView theme={theme} language={language} />;
       case "User Guide":
       case "Terms & Conditions":
       case "Policies":
       case "About":
-        return <StaticPages type={activeTab} theme={theme} />;
-      default: return <HomeView theme={theme} />;
+        return <StaticPages type={activeTab} theme={theme} language={language} />;
+      default: return <HomeView theme={theme} language={language} />;
+    }
+  };
+
+  const sidebarLabels: Record<"EN" | "BM", Record<string, string>> = {
+    EN: {
+      Home: "Home",
+      Dashboard: "Dashboard",
+      "New Document": "New Document",
+      Documents: "Documents",
+      Submissions: "Submissions",
+      "Visual Templates": "Visual Templates",
+      Notifications: "Notifications",
+      "User Guide": "User Guide",
+      "Terms & Conditions": "Terms & Conditions",
+      Policies: "Policies",
+      About: "About"
+    },
+    BM: {
+      Home: "Utama",
+      Dashboard: "Papan Pemuka",
+      "New Document": "Dokumen Baru",
+      Documents: "Dokumen",
+      Submissions: "Penyerahan",
+      "Visual Templates": "Templat Visual",
+      Notifications: "Notifikasi",
+      "User Guide": "Panduan Pengguna",
+      "Terms & Conditions": "Terma & Syarat",
+      Policies: "Polisi",
+      About: "Perihal"
     }
   };
 
@@ -194,6 +243,7 @@ export default function LHDNPortalMock() {
           <nav className="space-y-0.5 mt-2">
             {sidebarItems.map((item, idx) => {
               const isActive = activeTab === item.label;
+              const translatedLabel = sidebarLabels[language][item.label] || item.label;
               return (
                 <button
                   key={idx}
@@ -217,7 +267,7 @@ export default function LHDNPortalMock() {
                     </span>
                   )}
                   <item.icon className={`w-4 h-4 mr-3 transition-colors ${isActive ? "text-white" : "text-[#d1d2e3] group-hover:text-white"}`} />
-                  <span className={isActive ? "text-white" : "text-[#d1d2e3] group-hover:text-white"}>{item.label}</span>
+                  <span className={isActive ? "text-white" : "text-[#d1d2e3] group-hover:text-white"}>{translatedLabel}</span>
                 </button>
               );
             })}
@@ -232,26 +282,26 @@ export default function LHDNPortalMock() {
         {/* Header */}
         <header className={`h-14 flex items-center justify-between px-6 ${theme === "dark" ? "bg-[#201f1e] border-[#3b3a39]" : "bg-white border-[#edebe9] shadow-sm"} border-b shrink-0 z-10`}>
           <div className="flex items-center">
-            <Menu className="w-5 h-5 mr-4 text-[#605e5c] cursor-pointer hover:text-black" />
+            <Menu onClick={() => setActiveTab("Home")} className="w-5 h-5 mr-4 text-[#605e5c] cursor-pointer hover:text-[#3b43a8] transition-colors" />
             <img src="/LHDN_logo.png" className="w-8 h-8 object-contain mr-3" alt="LHDN" />
-            <span className="text-[16px] text-slate-700">MyInvois Portal</span>
+            <span className="text-[16px] text-slate-700 font-semibold">{language === "BM" ? "Portal MyInvois" : "MyInvois Portal"}</span>
           </div>
           <div className="flex items-center space-x-4 text-[14px]">
             {/* Theme Toggle */}
             <div className="flex items-center space-x-2">
-              <span className={`text-[12px] ${theme === "light" ? "font-bold" : "text-[#605e5c]"}`}>Light</span>
+              <span className={`text-[12px] ${theme === "light" ? "font-bold" : "text-[#605e5c]"}`}>{language === "BM" ? "Terang" : "Light"}</span>
               <button 
                 onClick={() => setTheme(theme === "light" ? "dark" : "light")}
                 className={`w-10 h-5 rounded-full relative flex items-center transition-colors ${theme === "dark" ? "bg-[#0078d4]" : "bg-[#605e5c]"}`}
               >
                 <div className={`w-3.5 h-3.5 rounded-full bg-white absolute transition-all ${theme === "dark" ? "right-1" : "left-1"}`} />
               </button>
-              <span className={`text-[12px] ${theme === "dark" ? "font-bold" : "text-[#605e5c]"}`}>Dark</span>
+              <span className={`text-[12px] ${theme === "dark" ? "font-bold" : "text-[#605e5c]"}`}>{language === "BM" ? "Gelap" : "Dark"}</span>
             </div>
             
             <div className="w-px h-4 bg-gray-300 mx-2" />
             
-            <button className="flex items-center hover:text-[#0078d4]"><HelpCircle className="w-4 h-4 mr-1" /> FAQ</button>
+            <button onClick={() => setActiveTab("User Guide")} className="flex items-center hover:text-[#0078d4] transition-colors"><HelpCircle className="w-4 h-4 mr-1" /> {language === "BM" ? "Soalan Lazim" : "FAQ"}</button>
             
             <div className="w-px h-4 bg-gray-300 mx-2" />
             
@@ -263,15 +313,18 @@ export default function LHDNPortalMock() {
             
             <div className="w-px h-4 bg-gray-300 mx-3" />
             
-            <button className="relative">
+            <button onClick={() => setActiveTab("Notifications")} className="relative hover:opacity-85 transition-opacity">
               <Bell className="w-5 h-5 text-[#3b43a8]" />
               <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></div>
             </button>
             
             <div className="flex items-center space-x-2 ml-4">
-              <div className="w-8 h-8 rounded-full bg-[#3b43a8] text-white flex items-center justify-center font-medium text-sm shadow-md">
+              <button 
+                onClick={() => alert(language === "BM" ? "Log masuk sebagai: Pentadbir MyInvois (admin@myinvois.gov.my)" : "Logged in as: MyInvois Administrator (admin@myinvois.gov.my)")}
+                className="w-8 h-8 rounded-full bg-[#3b43a8] text-white flex items-center justify-center font-medium text-sm shadow-md hover:bg-[#292b45] transition-colors"
+              >
                 M
-              </div>
+              </button>
             </div>
           </div>
         </header>
@@ -282,9 +335,9 @@ export default function LHDNPortalMock() {
           
           <div className="flex justify-end mt-8">
              <Link href="/">
-               <button className="text-sm text-[#0078d4] hover:underline flex items-center font-medium">
-                 ← Return to MyInvoisAI Demo
-               </button>
+                <button className="text-sm text-[#0078d4] hover:underline flex items-center font-medium transition-all hover:translate-x-[-4px]">
+                  ← {language === "BM" ? "Kembali ke Demo MyInvoisAI" : "Return to MyInvoisAI Demo"}
+                </button>
              </Link>
           </div>
         </main>

@@ -1,36 +1,19 @@
-import { Search, Filter, Download, FileText, CheckCircle2, AlertTriangle, Eye } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Search, Download, FileText, CheckCircle2, Eye } from "lucide-react";
+import { useState } from "react";
 import type { LHDNDocument } from "../../app/lhdn/page";
 
-export function DocumentsView({ theme, documents, onView, newestId }: { 
+export function DocumentsView({ theme, documents, onView, newestId, language = "EN" }: { 
   theme: "light" | "dark"; 
   documents?: LHDNDocument[]; 
   onView?: (doc: LHDNDocument) => void;
   newestId?: string;
+  language?: "EN" | "BM";
 }) {
   const [activeTab, setActiveTab] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [glowingIds, setGlowingIds] = useState<Set<string>>(new Set());
-  const [prevCount, setPrevCount] = useState(0);
+  const isBM = language === "BM";
 
   const data = documents || [];
-
-  // Track newly added documents and glow them
-  useEffect(() => {
-    if (data.length > prevCount && prevCount > 0) {
-      const newIds = data.slice(0, data.length - prevCount).map(d => d.id);
-      setGlowingIds(prev => new Set([...prev, ...newIds]));
-      // Remove glow after 6s
-      setTimeout(() => {
-        setGlowingIds(prev => {
-          const next = new Set(prev);
-          newIds.forEach(id => next.delete(id));
-          return next;
-        });
-      }, 6000);
-    }
-    setPrevCount(data.length);
-  }, [data.length]);
 
   const handleDownload = (doc: LHDNDocument) => {
     alert(`Downloading ${doc.code} as PDF...`);
@@ -61,10 +44,10 @@ export function DocumentsView({ theme, documents, onView, newestId }: {
   return (
     <div className="animate-in fade-in zoom-in-95 duration-300">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-light">Documents Directory</h1>
+        <h1 className="text-2xl font-light">{isBM ? "Direktori Dokumen" : "Documents Directory"}</h1>
         <div className="flex items-center gap-2">
           <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${theme === "dark" ? "bg-[#3b43a8]/30 text-[#8b92e8]" : "bg-blue-50 text-[#0078d4]"}`}>
-            {filtered.length} documents
+            {filtered.length} {isBM ? "dokumen" : "documents"}
           </span>
         </div>
       </div>
@@ -73,26 +56,34 @@ export function DocumentsView({ theme, documents, onView, newestId }: {
         {/* Filters & Search */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <div className="flex space-x-1 border-b border-[#edebe9] dark:border-[#3b3a39] w-full md:w-auto">
-            {["All", "Valid", "Invalid", "Cancelled"].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors relative ${
-                  activeTab === tab
-                    ? "border-[#0078d4] text-[#0078d4]"
-                    : "border-transparent hover:text-[#0078d4] text-[#605e5c] dark:text-[#a19f9d]"
-                }`}
-              >
-                {tab}
-                {tabCounts[tab] > 0 && (
-                  <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                    activeTab === tab ? "bg-[#0078d4] text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
-                  }`}>
-                    {tabCounts[tab]}
-                  </span>
-                )}
-              </button>
-            ))}
+            {["All", "Valid", "Invalid", "Cancelled"].map(tab => {
+              const tabLabels: Record<string, string> = {
+                All: isBM ? "Semua" : "All",
+                Valid: isBM ? "Sah" : "Valid",
+                Invalid: isBM ? "Tidak Sah" : "Invalid",
+                Cancelled: isBM ? "Dibatalkan" : "Cancelled",
+              };
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors relative ${
+                    activeTab === tab
+                      ? "border-[#0078d4] text-[#0078d4]"
+                      : "border-transparent hover:text-[#0078d4] text-[#605e5c] dark:text-[#a19f9d]"
+                  }`}
+                >
+                  {tabLabels[tab]}
+                  {tabCounts[tab] > 0 && (
+                    <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                      activeTab === tab ? "bg-[#0078d4] text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                    }`}>
+                      {tabCounts[tab]}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           <div className="flex space-x-2 w-full md:w-auto">
@@ -100,7 +91,7 @@ export function DocumentsView({ theme, documents, onView, newestId }: {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search ID, TIN, Supplier..."
+                placeholder={isBM ? "Cari ID, TIN, Pembekal..." : "Search ID, TIN, Supplier..."}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className={`w-full pl-9 pr-4 py-2 rounded-lg border text-sm outline-none transition-shadow focus:ring-2 focus:ring-[#0078d4]/20 focus:border-[#0078d4] ${inputBg}`}
@@ -117,13 +108,13 @@ export function DocumentsView({ theme, documents, onView, newestId }: {
           <table className="w-full text-left text-sm">
             <thead className={`text-xs uppercase border-b ${theme === "dark" ? "text-[#a19f9d] border-[#3b3a39]" : "text-[#605e5c] border-[#edebe9]"}`}>
               <tr>
-                <th className="px-4 py-3 font-medium">Invoice ID</th>
-                <th className="px-4 py-3 font-medium">Supplier</th>
-                <th className="px-4 py-3 font-medium">Buyer</th>
-                <th className="px-4 py-3 font-medium">Issue Date</th>
-                <th className="px-4 py-3 font-medium">Amount</th>
+                <th className="px-4 py-3 font-medium">{isBM ? "ID Invois" : "Invoice ID"}</th>
+                <th className="px-4 py-3 font-medium">{isBM ? "Pembekal" : "Supplier"}</th>
+                <th className="px-4 py-3 font-medium">{isBM ? "Pembeli" : "Buyer"}</th>
+                <th className="px-4 py-3 font-medium">{isBM ? "Tarikh Pengeluaran" : "Issue Date"}</th>
+                <th className="px-4 py-3 font-medium">{isBM ? "Amaun" : "Amount"}</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
+                <th className="px-4 py-3 font-medium text-right">{isBM ? "Tindakan" : "Actions"}</th>
               </tr>
             </thead>
             <tbody>
@@ -132,12 +123,11 @@ export function DocumentsView({ theme, documents, onView, newestId }: {
                   <td colSpan={7} className="px-4 py-12 text-center">
                     <FileText className="w-10 h-10 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
                     <p className={`text-sm font-medium ${theme === "dark" ? "text-[#a19f9d]" : "text-[#605e5c]"}`}>
-                      {searchQuery ? `No results for "${searchQuery}"` : `No ${activeTab.toLowerCase()} documents`}
+                      {searchQuery ? (isBM ? `Tiada hasil carian untuk "${searchQuery}"` : `No results for "${searchQuery}"`) : (isBM ? `Tiada dokumen ${activeTab.toLowerCase()}` : `No ${activeTab.toLowerCase()} documents`)}
                     </p>
                   </td>
                 </tr>
               ) : filtered.map((doc, idx) => {
-                const isNew = glowingIds.has(doc.id);
                 const isNewest = doc.id === newestId;
                 return (
                   <tr
@@ -146,18 +136,18 @@ export function DocumentsView({ theme, documents, onView, newestId }: {
                     className={`border-b cursor-pointer transition-all duration-300 group relative ${
                       theme === "dark" ? "border-[#3b3a39]" : "border-[#edebe9]"
                     } ${
-                      isNew || isNewest
+                      isNewest
                         ? "bg-[#eef6ff] dark:bg-[#1e2a3a] shadow-[0_0_0_2px_rgba(0,120,212,0.35)] shadow-inner"
                         : theme === "dark" ? "hover:bg-[#323130]" : "hover:bg-blue-50/60"
                     }`}
-                    style={isNew || isNewest ? {
+                    style={isNewest ? {
                       animation: "glowRow 2.5s ease-in-out infinite alternate",
                     } : undefined}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {/* Glowing "click me" indicator */}
-                        <div className={`relative flex-shrink-0 ${isNew || isNewest ? "block" : "hidden group-hover:block"}`}>
+                        <div className={`relative flex-shrink-0 ${isNewest ? "block" : "hidden"}`}>
                           <span className="w-2 h-2 rounded-full bg-[#0078d4] block" />
                           <span className="absolute inset-0 w-2 h-2 rounded-full bg-[#0078d4] animate-ping opacity-75" />
                         </div>
@@ -176,21 +166,22 @@ export function DocumentsView({ theme, documents, onView, newestId }: {
                           ? "bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400"
                           : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                       }`}>
-                        {doc.status === "Valid" ? "✓ " : doc.status === "Invalid" ? "✕ " : ""}{doc.status}
+                        {doc.status === "Valid" ? "✓ " : doc.status === "Invalid" ? "✕ " : ""}
+                        {doc.status === "Valid" ? (isBM ? "Sah" : "Valid") : doc.status === "Invalid" ? (isBM ? "Tidak Sah" : "Invalid") : (isBM ? "Dibatalkan" : "Cancelled")}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={e => { e.stopPropagation(); onView && onView(doc); }}
                         className="p-1.5 hover:bg-[#0078d4]/10 rounded transition-colors"
-                        title="View Document"
+                        title={isBM ? "Lihat Dokumen" : "View Document"}
                       >
                         <Eye className="w-4 h-4 text-[#0078d4]" />
                       </button>
                       <button
                         onClick={e => { e.stopPropagation(); handleDownload(doc); }}
                         className="p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors ml-1"
-                        title="Download"
+                        title={isBM ? "Muat Turun" : "Download"}
                       >
                         <Download className="w-4 h-4 text-[#605e5c]" />
                       </button>
@@ -205,7 +196,10 @@ export function DocumentsView({ theme, documents, onView, newestId }: {
         {/* Pagination */}
         <div className={`flex items-center justify-between pt-4 mt-4 border-t ${theme === "dark" ? "border-[#3b3a39]" : "border-[#edebe9]"}`}>
           <div className={`text-sm ${theme === "dark" ? "text-[#a19f9d]" : "text-[#605e5c]"}`}>
-            Showing {filtered.length} of {data.length} entries
+            {isBM 
+              ? `Menunjukkan ${filtered.length} daripada ${data.length} rekod`
+              : `Showing ${filtered.length} of ${data.length} entries`
+            }
           </div>
         </div>
       </div>

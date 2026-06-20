@@ -445,8 +445,8 @@ export default function Workspace() {
               standards and seamlessly transmitted to the government portal.
             </p>
             <div className="pt-4">
-              <button onClick={() => router.push('/integrations')} className="btn-candy-blue btn-glint text-white px-8 py-[14px] rounded-[12px] font-[600] text-[15px] transition-all shadow-md flex items-center group">
-                <span className="text-candy-shadow mr-2">Explore Features</span>
+              <button onClick={() => router.push('/how-it-works')} className="btn-candy-blue btn-glint text-white px-8 py-[14px] rounded-[12px] font-[600] text-[15px] transition-all shadow-md flex items-center group">
+                <span className="text-candy-shadow mr-2">Learn How It Works</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>

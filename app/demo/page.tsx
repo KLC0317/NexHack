@@ -368,66 +368,7 @@ export default function LiveDemoPage() {
     }
   }, [inputType, selectedPreset, file]);
 
-  // ── Poll logs during execution ─────────────────────────────────
-  useEffect(() => {
-    if (!invoiceId || !isProcessing) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/logs?invoiceId=${invoiceId}`);
-        const data = await res.json();
-        if (!Array.isArray(data)) return;
-        setLogs(data);
-
-        const hasDb = data.some(l => l.tool_name === "write_invoice_record" && l.status === "Success");
-        const hasVal = data.some(l => l.tool_name === "validate_ubl_invoice");
-        const hasQR = data.some(l => l.tool_name === "generate_lhdn_qr");
-        const valLog = data.find(l => l.tool_name === "validate_ubl_invoice");
-        const valFailed = valLog && safeParseJSON(valLog.output_response)?.errors?.length > 0;
-
-        setToolStates(prev => {
-          const next = { ...prev };
-          // Extractor
-          next.extractor = data.length === 0 ? "active" : "completed";
-          if (data.length === 0) setCurrentStep("Tool call: extract_invoice_fields → Gemini Vision…");
-          // DB Writer
-          if (next.extractor === "completed") {
-            next.dbWriter = hasDb ? "completed" : "active";
-            if (!hasDb) setCurrentStep("Tool call: write_invoice_record → supabase-db-mcp…");
-          }
-          // Validator
-          if (hasDb) {
-            next.validator = hasVal ? (valFailed ? "failed" : "completed") : "active";
-            if (!hasVal) setCurrentStep("Tool call: validate_ubl_invoice → lhdn-validator-mcp…");
-          }
-          // QR Signer
-          if (hasVal) {
-            next.qrSigner = hasQR ? "completed" : "active";
-            if (!hasQR) setCurrentStep("Tool call: generate_lhdn_qr → lhdn-validator-mcp…");
-          }
-          return next;
-        });
-
-        // Agent is active while any tool is active
-        const toolArr = Object.values(toolStates);
-        const anyActive = toolArr.some(s => s === "active");
-        const allDone = hasQR;
-
-        if (allDone) {
-          setAgentState("completed");
-          setOutState("completed");
-          setCurrentStep("Pipeline complete — review extracted fields.");
-          clearInterval(interval);
-          setIsProcessing(false);
-          setTimeout(() => fetchInvoiceForReview(invoiceId), 500);
-        } else {
-          setAgentState("active");
-        }
-      } catch (e) {
-        console.error("Poll error:", e);
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [invoiceId, isProcessing]);
+  // ── Sequenced Replay Log Sync ─────────────────────────────────
 
   const fetchInvoiceForReview = async (id: string) => {
     try {
@@ -449,21 +390,34 @@ export default function LiveDemoPage() {
 
   // ── Start pipeline ─────────────────────────────────────────────
   const startPipeline = async () => {
-    setIsProcessing(true); setLogs([]); setInvoiceId(null);
+    setIsProcessing(true);
+    setLogs([]);
+    setInvoiceId(null);
     setCurrentStep("Initializing agent…");
     resetNodes();
 
-    // Animate trigger → agent
-    setTimeout(() => { setTrigState("completed"); }, 300);
-    setTimeout(() => { setAgentState("active"); setCurrentStep("AI Agent reasoning — dispatching tool calls…"); }, 800);
-    setTimeout(() => { setToolStates(p => ({ ...p, extractor: "active" })); }, 1200);
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+    // 1. Animate trigger
+    setTrigState("active");
+    await sleep(400);
+    setTrigState("completed");
+
+    // 2. Animate agent
+    setAgentState("active");
+    setCurrentStep("AI Agent: reasoning and planning pipeline execution...");
+    await sleep(600);
+
+    // 3. Animate extractor active
+    setToolStates(p => ({ ...p, extractor: "active" }));
+    setCurrentStep("AI Agent: Dispatching extract_invoice_fields to Gemini Vision...");
 
     let payload: { documentType: string; documentData: string; documentMime?: string } = { documentType: "text", documentData: "" };
 
     if (inputType === "preset") {
       const filename = selectedPreset === "violation" ? "Invoice2.pdf" : selectedPreset === "enterprise" ? "Invoice3.pdf" : "Invoice1.pdf";
       try {
-        setCurrentStep(`Loading ${filename} for Gemini Vision…`);
+        setCurrentStep(`AI Agent: Loading ${filename} for Gemini Vision…`);
         const res = await fetch(`/${filename}`);
         const blob = await res.blob();
         const b64 = await new Promise<string>((resolve, reject) => {
@@ -487,6 +441,8 @@ export default function LiveDemoPage() {
       payload = { documentType: "image", documentData: b64, documentMime: mime };
     }
 
+    setCurrentStep("AI Agent: Extracting fields via Gemini Vision...");
+
     try {
       const res = await fetch("/api/agent/extract", {
         method: "POST",
@@ -494,17 +450,99 @@ export default function LiveDemoPage() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (data.invoice_id) {
-        setInvoiceId(data.invoice_id);
-      } else {
+      
+      if (!data.invoice_id) {
         setIsProcessing(false);
         setToolStates(p => ({ ...p, extractor: "failed" }));
         setAgentState("failed");
         alert("Pipeline failed: " + (data.error || "Unknown"));
+        return;
       }
+
+      setInvoiceId(data.invoice_id);
+
+      // Fetch the actual tool call logs from the database
+      const logsRes = await fetch(`/api/logs?invoiceId=${data.invoice_id}`);
+      const logsData = await logsRes.json();
+      setLogs(logsData);
+
+      // --- SEQUENCE REPLAY ---
+      
+      // 3. Extractor Complete
+      setToolStates(p => ({ ...p, extractor: "completed" }));
+      setCurrentStep("Gemini Vision: Extracted invoice fields successfully.");
+      await sleep(1000);
+
+      // 4. DB Writer Invocation
+      const dbLog = logsData.find((l: any) => l.tool_name === "write_invoice_record");
+      setToolStates(p => ({ ...p, dbWriter: "active" }));
+      setCurrentStep("AI Agent: Dispatching write_invoice_record to supabase-db-mcp...");
+      await sleep(1200);
+
+      if (dbLog) {
+        setToolStates(p => ({ ...p, dbWriter: dbLog.status === "Success" ? "completed" : "failed" }));
+        setCurrentStep(dbLog.status === "Success" ? "supabase-db-mcp: Saved draft invoice record successfully." : "supabase-db-mcp: Failed to write to database.");
+      } else {
+        setToolStates(p => ({ ...p, dbWriter: "completed" }));
+        setCurrentStep("supabase-db-mcp: Saved draft invoice record successfully.");
+      }
+      await sleep(1000);
+
+      // 5. Validator Invocation
+      const valLog = logsData.find((l: any) => l.tool_name === "validate_ubl_invoice" && l.status !== "Invoked");
+      setToolStates(p => ({ ...p, validator: "active" }));
+      setCurrentStep("AI Agent: Dispatching validate_ubl_invoice to lhdn-validator...");
+      await sleep(1200);
+
+      let isValSuccess = true;
+      if (valLog) {
+        isValSuccess = valLog.status === "Success";
+        setToolStates(p => ({ ...p, validator: isValSuccess ? "completed" : "failed" }));
+        if (isValSuccess) {
+          setCurrentStep("lhdn-validator: Invoice validation passed (Phase 4 rules compliant).");
+        } else {
+          setCurrentStep("lhdn-validator: Validation failed (Phase 4 RM10,000 threshold check failed).");
+        }
+      } else {
+        setToolStates(p => ({ ...p, validator: "completed" }));
+        setCurrentStep("lhdn-validator: Invoice validation passed.");
+      }
+      await sleep(1000);
+
+      // 6. QR Signer Invocation
+      const qrLog = logsData.find((l: any) => l.tool_name === "generate_lhdn_qr" && l.status !== "Invoked");
+      setToolStates(p => ({ ...p, qrSigner: "active" }));
+      setCurrentStep("AI Agent: Dispatching generate_lhdn_qr to lhdn-validator...");
+      await sleep(1200);
+
+      if (qrLog) {
+        const isQrSuccess = qrLog.status === "Success";
+        setToolStates(p => ({ ...p, qrSigner: isQrSuccess ? "completed" : "failed" }));
+        setCurrentStep(isQrSuccess ? "lhdn-validator: Signed invoice and generated LHDN QR code." : "lhdn-validator: QR generation failed.");
+      } else {
+        setToolStates(p => ({ ...p, qrSigner: "completed" }));
+        setCurrentStep("lhdn-validator: Signed invoice and generated LHDN QR code.");
+      }
+      await sleep(1000);
+
+      // 7. Output portal integration complete
+      setAgentState("completed");
+      setOutState(data.status === "Validated" ? "completed" : "failed");
+      setCurrentStep(data.status === "Validated" ? "e-Invoice successfully validated and signed. Ready for review!" : "Pipeline completed. Verification issues detected.");
+      
+      setIsProcessing(false);
+
+      // Auto-open the Review Fields modal
+      await fetchInvoiceForReview(data.invoice_id);
+
     } catch (e: any) {
       setIsProcessing(false);
-      setToolStates(p => ({ ...p, extractor: "failed" }));
+      setToolStates(p => ({
+        extractor: p.extractor === "completed" ? "completed" : "failed",
+        dbWriter: p.dbWriter === "completed" ? "completed" : "failed",
+        validator: p.validator === "completed" ? "completed" : "failed",
+        qrSigner: p.qrSigner === "completed" ? "completed" : "failed",
+      }));
       setAgentState("failed");
       alert("Error: " + e.message);
     }
@@ -520,7 +558,7 @@ export default function LiveDemoPage() {
         body: JSON.stringify({ invoice: extractedInvoice, items: extractedItems }),
       });
       const data = await res.json();
-      if (data.success) { setShowModal(false); router.push("/lhdn"); }
+      if (data.success) { setShowModal(false); router.push(`/lhdn?highlight=${invoiceId}`); }
       else alert("Failed: " + (data.error || "Unknown"));
     } catch (err: any) { alert("Error: " + err.message); }
     finally { setIsSaving(false); }
@@ -533,55 +571,35 @@ export default function LiveDemoPage() {
   return (
     <div className="min-h-screen bg-[#F0F4F8] dark:bg-slate-950">
 
-      {/* ── Top breadcrumb bar ─────────────────────────────────────────────── */}
-      <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 sticky top-[76px] z-40">
-        <div className="max-w-[1400px] mx-auto px-6 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-3 text-sm">
-            <Link href="/" className="flex items-center gap-1.5 text-slate-500 hover:text-sky-600 transition-colors font-medium">
-              <ArrowLeft className="w-3.5 h-3.5" /> Home
-            </Link>
-            <span className="text-slate-300 dark:text-slate-700">/</span>
-            <span className="text-slate-700 dark:text-slate-200 font-semibold">Live Agent Simulator</span>
-            <div className="flex items-center gap-1.5 ml-2 px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Live</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {isProcessing && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60">
-                <Loader2 className="w-3 h-3 text-sky-500 animate-spin" />
-                <span className="text-[11px] font-bold text-sky-600 dark:text-sky-400">{elapsedTime}s</span>
-              </div>
-            )}
-            {invoiceId && !isProcessing && (
-              <button
-                onClick={() => fetchInvoiceForReview(invoiceId)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-all text-xs font-semibold"
-              >
-                <Edit className="w-3.5 h-3.5" /> Review Fields
-              </button>
-            )}
-            <Link href="/lhdn">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-all text-xs font-medium">
-                LHDN Portal <ExternalLink className="w-3 h-3" />
-              </button>
-            </Link>
-          </div>
-        </div>
-      </div>
-
       {/* ── Page heading ─────────────────────────────────────────────────── */}
-      <div className="max-w-[1400px] mx-auto px-6 pt-8 pb-6">
-        <div className="mb-1">
-          <span className="text-[11px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-widest">Interactive Simulator</span>
+      <div className="max-w-[1400px] mx-auto px-6 pt-8 pb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div>
+          <div className="mb-1">
+            <span className="text-[11px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-widest">Interactive Simulator</span>
+          </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white font-ubuntu leading-tight">
+            MyInvoisAI Live Agent Simulation
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1.5 max-w-2xl">
+            Watch the AI agent dispatch real MCP tool calls: extract invoice fields, validate UBL compliance, and generate LHDN QR codes in real-time.
+          </p>
         </div>
-        <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white font-ubuntu leading-tight">
-          MyInvoisAI Live Agent Simulation
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1.5 max-w-2xl">
-          Watch the AI agent dispatch real MCP tool calls — extract invoice fields, validate UBL compliance, and generate LHDN QR codes in real-time.
-        </p>
+        <div className="flex items-center gap-2 self-start md:self-auto">
+          {isProcessing && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60">
+              <Loader2 className="w-3 h-3 text-sky-500 animate-spin" />
+              <span className="text-[11px] font-bold text-sky-600 dark:text-sky-400">{elapsedTime}s</span>
+            </div>
+          )}
+          {invoiceId && !isProcessing && (
+            <button
+              onClick={() => fetchInvoiceForReview(invoiceId)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-all text-xs font-semibold"
+            >
+              <Edit className="w-3.5 h-3.5" /> Review Fields
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Two-column layout ─────────────────────────────────────────────── */}
@@ -602,8 +620,8 @@ export default function LiveDemoPage() {
               {(["preset", "upload", "whatsapp"] as const).map((t) => (
                 <button key={t} onClick={() => setInputType(t)}
                   className={`py-2 text-xs font-semibold rounded-lg transition-all capitalize ${inputType === t
-                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                     }`}>
                   {t === "whatsapp" ? "WhatsApp" : t === "upload" ? "Upload" : "Presets"}
                 </button>
@@ -620,8 +638,8 @@ export default function LiveDemoPage() {
                 ]).map((p) => (
                   <button key={p.id} onClick={() => setSelectedPreset(p.id)}
                     className={`w-full p-3 rounded-xl border text-left transition-all flex items-center justify-between ${selectedPreset === p.id
-                        ? "border-sky-400 bg-sky-50/80 dark:bg-sky-950/30 dark:border-sky-600"
-                        : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                      ? "border-sky-400 bg-sky-50/80 dark:bg-sky-950/30 dark:border-sky-600"
+                      : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/30"
                       }`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${selectedPreset === p.id ? "bg-sky-100 dark:bg-sky-900/40" : "bg-slate-100 dark:bg-slate-800"}`}>
@@ -712,11 +730,11 @@ export default function LiveDemoPage() {
                 </span>
               )}
             </div>
-            <div className="h-[300px] bg-slate-50 dark:bg-slate-950 relative">
+            <div className="h-[550px] bg-slate-50 dark:bg-slate-950 relative overflow-hidden">
               {previewUrl && (inputType === "preset" || (inputType === "upload" && file)) ? (
-                <iframe src={`${previewUrl}#toolbar=0&navpanes=0`} className="w-full h-full border-0" title="Invoice Preview" />
+                <iframe src={`${previewUrl}#toolbar=0&navpanes=0`} className="w-full h-full border-0 overflow-hidden" scrolling="no" title="Invoice Preview" />
               ) : inputType === "whatsapp" ? (
-                <div className="h-full flex flex-col bg-[#ECE5DD] p-3">
+                <div className="h-full flex flex-col bg-[#ECE5DD] p-3 overflow-hidden">
                   <div className="flex items-center gap-2 mb-3 pb-2 border-b border-black/10">
                     <div className="w-7 h-7 rounded-full bg-[#25D366] flex items-center justify-center">
                       <MessageSquare className="w-3.5 h-3.5 text-white" />
@@ -802,7 +820,7 @@ export default function LiveDemoPage() {
               <div className="border-t border-slate-200/60 dark:border-slate-800/60">
                 {logs.length === 0 ? (
                   <div className="py-8 text-center">
-                    <p className="text-xs text-slate-400">No traces yet — run the pipeline to see MCP tool calls.</p>
+                    <p className="text-xs text-slate-400">No traces yet, run the pipeline to see MCP tool calls.</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100 dark:divide-slate-800/60 max-h-[280px] overflow-y-auto">
@@ -817,8 +835,8 @@ export default function LiveDemoPage() {
                               <span className="text-[9px] text-slate-400 font-mono">{log.mcp_server}</span>
                             </div>
                             <span className={`px-2 py-0.5 text-[8px] font-bold rounded-full uppercase tracking-wider ${log.status === "Success"
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                                : "bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400"
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                              : "bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400"
                               }`}>{log.status}</span>
                           </div>
                           {payload && (

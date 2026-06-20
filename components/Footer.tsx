@@ -20,8 +20,9 @@ export function Footer() {
             <h4 className="font-semibold text-slate-900 dark:text-white mb-4 text-sm uppercase tracking-wider">Navigate</h4>
             <ul className="space-y-2.5">
               <li><Link href="/" className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 text-sm transition-colors">Home</Link></li>
+              <li><Link href="/how-it-works" className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 text-sm transition-colors">How It Works</Link></li>
               <li><Link href="/demo" className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 text-sm transition-colors">Agent Simulator</Link></li>
-              <li><Link href="/integrations" className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 text-sm transition-colors">How It Works</Link></li>
+              <li><Link href="/integrations" className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 text-sm transition-colors">Connect to LHDN</Link></li>
               <li><Link href="/lhdn" className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 text-sm transition-colors">LHDN Portal</Link></li>
             </ul>
           </div>
