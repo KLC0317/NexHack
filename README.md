@@ -217,3 +217,25 @@ Bilingual selection utilizes client-side layout controllers in `app/lhdn/page.ts
 - Sidebar Map: The sidebar labels translate instantly via the `sidebarLabels` record mapping.
 - Sub-components: Subcomponents bind to the `language` parameter and use checks (e.g. `const isBM = language === "BM"`) to dynamically swap labels, placeholders, lists, error messages, and totals fields instantly.
 - Layout Retention: All layouts preserve exact sizes, borders, colors, and layouts during text swaps to prevent structural displacement.
+
+---
+
+## Visitor Analytics Integration
+
+To start counting visitors and page views, follow these steps:
+
+### 1. Install package
+Start by installing @vercel/analytics in your existing project:
+```bash
+npm i @vercel/analytics
+```
+
+### 2. Add the React component
+Import and use the Analytics React component in your app's layout (`app/layout.tsx`):
+```tsx
+import { Analytics } from "@vercel/analytics/next"
+```
+
+### 3. Deploy & Visit your Site
+Deploy your changes and visit the deployment to collect your page views. If you do not see data after 30 seconds, please check for content blockers and try to navigate between pages on your site.
+
