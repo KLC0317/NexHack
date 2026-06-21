@@ -1,22 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenAI, Type } from "@google/genai";
 import { Pool } from "pg";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_KEY });
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Helper to interact with our local MCP router internally
 async function callMCP(server: string, method: string, params: any, invoiceId: string | null = null) {
-  // First, log the invocation
   if (invoiceId) {
     await logMCPTool(invoiceId, server, method, "Invoked", params, null);
   }
-
-  // Simulate internal call to our MCP Router
-  // In a real environment, this could be a fetch to an external/internal URL
-  // We'll mimic the internal logic for speed, or we can fetch against our own endpoint
-  // For safety in this environment without a stable hostname, we'll do direct DB calls for writes
-  // but let's implement the logic here to keep it simple.
 
   let result = null;
   let error = null;
@@ -68,86 +58,17 @@ async function logMCPTool(invoiceId: string, mcpServer: string, toolName: string
 
 export async function POST(req: NextRequest) {
   try {
-    const { documentType, documentData, documentMime, extract_only } = await req.json();
-    // documentType: 'text' or 'image'
-    // documentData: base64 string or raw text
-    // documentMime: optional mime type override (defaults to application/pdf for image type)
+    const { invoice, items, documentType } = await req.json();
 
-    let prompt = `You are a Malaysian Tax Auditor. Analyze the items in the receipt/order.
-Map each item to its corresponding 5-digit Malaysia Standard Industrial Classification (MSIC) code (e.g., 23990 for mineral products, 56101 for restaurants, 47111 for provision stores).
-Classify the tax category to standard LHDN codes: '01' (SST 6%/10%), '02' (Service Tax 6%/8%), or 'E' (Exempt).
-Detect if the transaction is a single invoice total >= RM10,000.00.`;
-
-    let parts: any[] = [];
-    if (documentType === 'image') {
-      const mimeType = documentMime || "application/pdf";
-      parts = [
-        { text: prompt },
-        { inlineData: { data: documentData, mimeType } }
-      ];
-    } else {
-      parts = [
-        { text: prompt },
-        { text: "Raw Document Text: " + documentData }
-      ];
-    }
-
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-lite",
-      contents: parts,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            invoice_number: { type: Type.STRING },
-            invoice_type_code: { type: Type.STRING, description: "01=Invoice, 02=Credit Note, 03=Debit Note, 04=Refund" },
-            supplier_name: { type: Type.STRING },
-            supplier_tin: { type: Type.STRING },
-            supplier_brn: { type: Type.STRING },
-            buyer_name: { type: Type.STRING },
-            buyer_tin: { type: Type.STRING },
-            buyer_brn: { type: Type.STRING },
-            items: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  description: { type: Type.STRING },
-                  quantity: { type: Type.NUMBER },
-                  unit_price: { type: Type.NUMBER },
-                  subtotal: { type: Type.NUMBER },
-                  tax_type: { type: Type.STRING, description: "'01' | '02' | '03' | 'E' | 'N/A'" },
-                  tax_rate: { type: Type.NUMBER },
-                  tax_amount: { type: Type.NUMBER },
-                  classification_code: { type: Type.STRING, description: "Must match standard 5-digit MSIC format" }
-                }
-              }
-            }
-          },
-          required: ["items"]
-        }
-      }
-    });
-
-    const extractionResult = tryRepairJSON(response.text || "{}");
-
-    if (extract_only) {
-      return NextResponse.json({ success: true, extraction: extractionResult });
-    }
-
-
-    // 1. Write Initial Record (Simulating supabase-db-mcp)
     const client = await pool.connect();
     let invoiceId = "";
     try {
-      const inv = extractionResult || {};
-      const items = inv.items || [];
+      const inv = invoice || {};
+      const invItems = items || [];
       
       let computedSubtotal = 0;
       let computedTaxTotal = 0;
-      for (const item of items) {
+      for (const item of invItems) {
         computedSubtotal += sanitizeNum(item.subtotal);
         computedTaxTotal += sanitizeNum(item.tax_amount);
       }
@@ -198,9 +119,8 @@ Detect if the transaction is a single invoice total >= RM10,000.00.`;
         throw new Error("Failed to insert invoice record due to persistent unique constraint violations.");
       }
 
-      // Allowable tax_type values per schema CHECK constraint
       const VALID_TAX_TYPES = ['01', '02', '03', 'E', 'N/A'];
-      for (const item of items) {
+      for (const item of invItems) {
         const rawTaxType = item.tax_type ?? item.taxType ?? null;
         const taxType = VALID_TAX_TYPES.includes(rawTaxType) ? rawTaxType : 'N/A';
         const unitMeasurement = item.unit_measurement || item.unitMeasurement || 'EA';
@@ -229,14 +149,12 @@ Detect if the transaction is a single invoice total >= RM10,000.00.`;
     }
 
     // Log the write operation
-    await logMCPTool(invoiceId, 'supabase-db-mcp', 'write_invoice_record', 'Success', extractionResult, { invoice_id: invoiceId });
+    await logMCPTool(invoiceId, 'supabase-db-mcp', 'write_invoice_record', 'Success', invoice, { invoice_id: invoiceId });
 
-    // 2. Validate Phase 4 Limits via new API endpoint
-    // We fetch the newly inserted invoice to get full data for validation
+    // 2. Validate Phase 4 Limits
     const fullInvRes = await pool.query('SELECT * FROM invoices WHERE id = $1', [invoiceId]);
     const fullInv = fullInvRes.rows[0];
     
-    // Call the external compliance guardrail endpoint we are building
     const validationUrl = new URL('/api/lhdn-sandbox/v1.1/documents/submissions', req.nextUrl.origin).toString();
     const valResRaw = await fetch(validationUrl, {
       method: "POST",
@@ -244,7 +162,7 @@ Detect if the transaction is a single invoice total >= RM10,000.00.`;
       body: JSON.stringify({
         invoiceId,
         invoice: fullInv,
-        items: extractionResult.items || []
+        items: items || []
       })
     });
     const valRes = await valResRaw.json();
@@ -252,11 +170,11 @@ Detect if the transaction is a single invoice total >= RM10,000.00.`;
     let lhdnStatus = valRes.status || 'Validation Failed';
     let valErrors = valRes.errors || null;
 
-    // 3. Generate QR via MCP call
+    // 3. Generate QR
     const qrRes = await callMCP('lhdn-validator-mcp', 'generate_lhdn_qr', { uuid: invoiceId, origin: req.nextUrl.origin }, invoiceId);
     let qrUrl = qrRes.result?.qr_url || null;
 
-    // 4. Update Database with final LHDN status
+    // 4. Update Database
     const updateClient = await pool.connect();
     try {
       await updateClient.query(`
@@ -270,7 +188,7 @@ Detect if the transaction is a single invoice total >= RM10,000.00.`;
 
     return NextResponse.json({ success: true, invoice_id: invoiceId, status: lhdnStatus });
   } catch (error: any) {
-    console.error("Agent Extraction Error:", error);
+    console.error("Agent Submit Error:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
@@ -279,120 +197,4 @@ function sanitizeNum(val: any): number {
   if (val === undefined || val === null) return 0;
   const num = typeof val === 'number' ? val : parseFloat(String(val));
   return Number.isFinite(num) ? num : 0;
-}
-
-function tryRepairJSON(jsonStr: string): any {
-  try {
-    return JSON.parse(jsonStr);
-  } catch (e: any) {
-    let cleaned = jsonStr.trim();
-    if (cleaned.startsWith("```json")) {
-      cleaned = cleaned.substring(7);
-    } else if (cleaned.startsWith("```")) {
-      cleaned = cleaned.substring(3);
-    }
-    if (cleaned.endsWith("```")) {
-      cleaned = cleaned.substring(0, cleaned.length - 3);
-    }
-    cleaned = cleaned.trim();
-
-    try {
-      return JSON.parse(cleaned);
-    } catch (e2) {
-      try {
-        return parseTruncatedJSON(cleaned);
-      } catch (e3: any) {
-        throw new Error(`JSON parsing failed: ${e.message}. Attempted repair but got: ${e3.message}. Original text snippet: ${jsonStr.substring(0, 200)}...`);
-      }
-    }
-  }
-}
-
-function parseTruncatedJSON(str: string): any {
-  let cleanStr = str.trim();
-
-  // 1. Close unclosed string literals at the end
-  let openQuote = false;
-  let escaped = false;
-  for (let i = 0; i < cleanStr.length; i++) {
-    if (cleanStr[i] === '\\' && !escaped) {
-      escaped = true;
-    } else {
-      if (cleanStr[i] === '"' && !escaped) {
-        openQuote = !openQuote;
-      }
-      escaped = false;
-    }
-  }
-
-  if (openQuote) {
-    cleanStr += '"';
-  }
-
-  // 2. Build the bracket/brace stack
-  const stack: string[] = [];
-  openQuote = false;
-  escaped = false;
-
-  for (let i = 0; i < cleanStr.length; i++) {
-    const char = cleanStr[i];
-    if (char === '\\' && !escaped) {
-      escaped = true;
-      continue;
-    }
-    if (char === '"' && !escaped) {
-      openQuote = !openQuote;
-    }
-    escaped = false;
-
-    if (!openQuote) {
-      if (char === '{' || char === '[') {
-        stack.push(char);
-      } else if (char === '}') {
-        if (stack[stack.length - 1] === '{') {
-          stack.pop();
-        }
-      } else if (char === ']') {
-        if (stack[stack.length - 1] === '[') {
-          stack.pop();
-        }
-      }
-    }
-  }
-
-  // 3. Clean up trailing commas, colons, or unclosed keys
-  let repaired = cleanStr;
-  while (true) {
-    const temp = repaired.trim();
-    if (temp.endsWith(',') || temp.endsWith(':')) {
-      repaired = temp.slice(0, -1);
-      continue;
-    }
-    if (temp.endsWith('"')) {
-      const lastQuoteIdx = temp.lastIndexOf('"', temp.length - 2);
-      if (lastQuoteIdx !== -1) {
-        const preceding = temp.substring(0, lastQuoteIdx).trim();
-        if (preceding.endsWith(',') || preceding.endsWith('{') || preceding.endsWith('[')) {
-          repaired = preceding;
-          if (repaired.endsWith(',')) {
-            repaired = repaired.slice(0, -1);
-          }
-          continue;
-        }
-      }
-    }
-    break;
-  }
-
-  // 4. Close matching open brackets/braces
-  while (stack.length > 0) {
-    const lastOpen = stack.pop();
-    if (lastOpen === '{') {
-      repaired += '}';
-    } else if (lastOpen === '[') {
-      repaired += ']';
-    }
-  }
-
-  return JSON.parse(repaired);
 }

@@ -447,11 +447,11 @@ export default function LiveDemoPage() {
       const res = await fetch("/api/agent/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, extract_only: true }),
       });
       const data = await res.json();
       
-      if (!data.invoice_id) {
+      if (!data.success) {
         setIsProcessing(false);
         setToolStates(p => ({ ...p, extractor: "failed" }));
         setAgentState("failed");
@@ -459,6 +459,60 @@ export default function LiveDemoPage() {
         return;
       }
 
+      // --- SEQUENCE REPLAY ---
+      
+      // 3. Extractor Complete
+      setToolStates(p => ({ ...p, extractor: "completed" }));
+      setCurrentStep("Gemini Vision: Extracted invoice fields successfully. Awaiting human review.");
+      await sleep(1000);
+
+      setExtractedInvoice(data.extraction || {});
+      setExtractedItems(data.extraction?.items || []);
+      
+      setIsProcessing(false);
+      setShowModal(true);
+
+    } catch (e: any) {
+      setIsProcessing(false);
+      setToolStates(p => ({
+        extractor: p.extractor === "completed" ? "completed" : "failed",
+        dbWriter: p.dbWriter === "completed" ? "completed" : "failed",
+        validator: p.validator === "completed" ? "completed" : "failed",
+        qrSigner: p.qrSigner === "completed" ? "completed" : "failed",
+      }));
+      setAgentState("failed");
+      alert("Error: " + e.message);
+    }
+  };
+
+
+  const handleConfirmReview = async () => {
+    setIsSaving(true);
+    setShowModal(false);
+    setIsProcessing(true);
+
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+    try {
+      // 4. DB Writer Invocation
+      setToolStates(p => ({ ...p, dbWriter: "active" }));
+      setCurrentStep("AI Agent: Dispatching write_invoice_record to supabase-db-mcp...");
+
+      const res = await fetch(`/api/agent/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          invoice: extractedInvoice, 
+          items: extractedItems,
+          documentType: inputType === "whatsapp" ? "text" : "image"
+        }),
+      });
+      const data = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || "Unknown error during submit");
+      }
+      
       setInvoiceId(data.invoice_id);
 
       // Fetch the actual tool call logs from the database
@@ -466,19 +520,7 @@ export default function LiveDemoPage() {
       const logsData = await logsRes.json();
       setLogs(logsData);
 
-      // --- SEQUENCE REPLAY ---
-      
-      // 3. Extractor Complete
-      setToolStates(p => ({ ...p, extractor: "completed" }));
-      setCurrentStep("Gemini Vision: Extracted invoice fields successfully.");
-      await sleep(1000);
-
-      // 4. DB Writer Invocation
       const dbLog = logsData.find((l: any) => l.tool_name === "write_invoice_record");
-      setToolStates(p => ({ ...p, dbWriter: "active" }));
-      setCurrentStep("AI Agent: Dispatching write_invoice_record to supabase-db-mcp...");
-      await sleep(1200);
-
       if (dbLog) {
         setToolStates(p => ({ ...p, dbWriter: dbLog.status === "Success" ? "completed" : "failed" }));
         setCurrentStep(dbLog.status === "Success" ? "supabase-db-mcp: Saved draft invoice record successfully." : "supabase-db-mcp: Failed to write to database.");
@@ -528,41 +570,19 @@ export default function LiveDemoPage() {
       // 7. Output portal integration complete
       setAgentState("completed");
       setOutState(data.status === "Validated" ? "completed" : "failed");
-      setCurrentStep(data.status === "Validated" ? "e-Invoice successfully validated and signed. Ready for review!" : "Pipeline completed. Verification issues detected.");
+      setCurrentStep(data.status === "Validated" ? "e-Invoice successfully validated and signed. Redirecting to portal..." : "Pipeline completed. Verification issues detected.");
       
       setIsProcessing(false);
 
-      // Auto-open the Review Fields modal
-      await fetchInvoiceForReview(data.invoice_id);
-
-    } catch (e: any) {
+      if (data.success) { router.push(`/lhdn?highlight=${data.invoice_id}`); }
+    } catch (err: any) { 
       setIsProcessing(false);
-      setToolStates(p => ({
-        extractor: p.extractor === "completed" ? "completed" : "failed",
-        dbWriter: p.dbWriter === "completed" ? "completed" : "failed",
-        validator: p.validator === "completed" ? "completed" : "failed",
-        qrSigner: p.qrSigner === "completed" ? "completed" : "failed",
-      }));
       setAgentState("failed");
-      alert("Error: " + e.message);
+      alert("Error: " + err.message); 
     }
-  };
-
-  const handleConfirmReview = async () => {
-    if (!invoiceId) return;
-    setIsSaving(true);
-    try {
-      const res = await fetch(`/api/invoice/${invoiceId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoice: extractedInvoice, items: extractedItems }),
-      });
-      const data = await res.json();
-      if (data.success) { setShowModal(false); router.push(`/lhdn?highlight=${invoiceId}`); }
-      else alert("Failed: " + (data.error || "Unknown"));
-    } catch (err: any) { alert("Error: " + err.message); }
     finally { setIsSaving(false); }
   };
+
 
   const isIdle = !isProcessing && !invoiceId;
   const anyActive = isProcessing || Object.values(toolStates).some(s => s === "active");
