@@ -21,6 +21,7 @@ export function Navbar() {
           <Link href="/how-it-works" className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors">How It Works</Link>
           <Link href="/demo" className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors">Agent Simulator</Link>
           <Link href="/integrations" className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors">Connect to LHDN</Link>
+          <Link href="/accountant" className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors">Accountant Portal</Link>
         </div>
       </div>
 

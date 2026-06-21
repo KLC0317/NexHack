@@ -82,7 +82,7 @@ export default function Workspace() {
                   }}
                   className="text-[18px] md:text-[22px] text-slate-600 dark:text-slate-300 max-w-[620px] leading-[1.6] font-normal"
                 >
-                  Instantly reconcile receipts, check strict compliance policies in real-time, and transmit directly to the LHDN MyInvois Portal.
+                  Autonomously reconcile receipts with Gemini Vision, enforce LHDN Phase 4 compliance, and export audit-ready UBL 2.1 via the dedicated Accountant Portal.
                 </motion.p>
 
                 {/* CTA Buttons */}
@@ -94,17 +94,23 @@ export default function Workspace() {
                   className="flex flex-wrap justify-center lg:justify-start gap-4 pt-4"
                 >
                   <Link
-                    href="/lhdn"
-                    className="btn-premium-primary text-white px-10 py-[16px] rounded-[12px] font-semibold text-[16px] active:scale-95 group flex items-center"
+                    href="/demo"
+                    className="btn-premium-primary text-white px-8 py-[14px] rounded-[12px] font-semibold text-[15px] active:scale-95 group flex items-center shadow-md"
                   >
-                    <span className="text-candy-shadow">Connect to LHDN</span>
-                    <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                    <span className="text-candy-shadow">Live AI Demo</span>
+                    <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Link>
                   <Link
-                    href="/demo"
-                    className="btn-premium-secondary px-10 py-[16px] rounded-[12px] font-semibold text-[16px] active:scale-95"
+                    href="/accountant"
+                    className="btn-premium-secondary px-8 py-[14px] rounded-[12px] font-semibold text-[15px] active:scale-95 shadow-sm"
                   >
-                    Try Live Demo
+                    Accountant Portal
+                  </Link>
+                  <Link
+                    href="/lhdn"
+                    className="btn-premium-secondary px-8 py-[14px] rounded-[12px] font-semibold text-[15px] active:scale-95 shadow-sm"
+                  >
+                    Mock LHDN
                   </Link>
                 </motion.div>
               </motion.div>
@@ -437,12 +443,10 @@ export default function Workspace() {
               Automatic <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-teal-400">Report</span>
             </h2>
             <p className="text-[16px] md:text-[18px] text-slate-600 dark:text-slate-300 leading-[1.6] font-normal pt-2">
-              MyInvoisAI's extraction technology provides its users with a robust system for managing their documents,
-              testing it against specific LHDN validation rules and then measuring compliance.
+              Powered by Gemini Vision, MyInvoisAI autonomously extracts and maps raw receipts to official 5-digit MSIC codes and SST tax codes without manual data entry.
             </p>
             <p className="text-[16px] md:text-[18px] text-slate-600 dark:text-slate-300 leading-[1.6] font-normal">
-              Our system ensures every receipt and invoice uploaded is mapped to Universal Business Language (UBL)
-              standards and seamlessly transmitted to the government portal.
+              We enforce LHDN Phase 4 restrictions natively—including RM10,000 threshold validation—and provide a dedicated Portal Akauntan for auditors to instantly export month-end UBL 2.1 XML and CSV logs.
             </p>
             <div className="pt-4">
               <button onClick={() => router.push('/how-it-works')} className="btn-candy-blue btn-glint text-white px-8 py-[14px] rounded-[12px] font-[600] text-[15px] transition-all shadow-md flex items-center group">

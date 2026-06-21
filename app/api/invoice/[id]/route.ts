@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Pool } from "pg";
+import { validateLHDNCompliance } from "../../lhdn-sandbox/v1.1/documents/submissions/route";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -45,14 +46,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     await client.query("BEGIN");
 
-    // Recalculate status: if it violates compliance rules (Consolidated TIN + RM 10k+)
-    let finalStatus = "Validated";
-    let validationErrors = null;
-
-    if (invoice.buyer_tin === "EI00000000010" && parseFloat(invoice.total_payable || 0) >= 10000) {
-      finalStatus = "Validation Failed";
-      validationErrors = [{ code: "PHASE4_LIMIT_EXCEEDED", message: "Consolidated invoices cannot exceed RM10,000." }];
-    }
+    // Recalculate status using the full LHDN compliance sandbox rules
+    const { isValid, errors } = validateLHDNCompliance(invoice, items);
+    
+    let finalStatus = isValid ? "Validated" : "Validation Failed";
+    let validationErrors = isValid ? null : errors;
 
     await client.query(`
       UPDATE invoices

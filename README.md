@@ -6,6 +6,35 @@ The application allows users to ingest unstructured inputs (such as WhatsApp tex
 
 ---
 
+## 📊 Pitch Deck & Business Case
+
+### Problem Statement
+With the impending enforcement of LHDN's e-invoicing mandate in Malaysia, SMEs face a massive compliance burden. Many small businesses operate informally—receiving orders and sending manual invoices via WhatsApp, emails, or physical PDFs. Transitioning from unstructured data to strict, schema-compliant JSON payloads for the LHDN portal requires technical expertise, time, and manual data entry. This friction leads to high operational costs, delayed payments, and the risk of severe non-compliance penalties.
+
+### Our Solution
+**MyInvoisAI** bridges the gap between informal business operations and strict regulatory requirements. We provide an end-to-end automation pipeline that:
+1. **Ingests** unstructured data directly from informal communication channels (e.g., WhatsApp messages, PDF uploads).
+2. **Extracts & Maps** the data using **Gemini AI** to accurately map buyer/supplier details, MSIC codes, and tax metrics to the official LHDN schema.
+3. **Validates & Submits** the data cryptographically into an LHDN-compliant database and provides visualization through a bilingual mock portal.
+
+### Target Market
+*   **Micro, Small, and Medium Enterprises (MSMEs) in Malaysia**: Specifically those lacking dedicated IT or accounting departments.
+*   **Freelancers & Gig Economy Workers**: Professionals who frequently negotiate and handle transactions via chat apps.
+*   **B2B Service Providers & Retailers**: Businesses needing to automate high volumes of disparate invoice formats without rebuilding their entire point-of-sale infrastructure.
+
+### Pricing Strategy (SaaS Model)
+*   **Starter (Free)**: Up to 50 AI extractions/month, manual uploads, basic visual templates. Perfect for micro-businesses.
+*   **Pro (RM 99/month)**: Up to 1,000 AI extractions/month, automated WhatsApp/Email integration, automated agent routing, and full bilingual LHDN portal features.
+*   **Enterprise (Custom Pricing)**: Unlimited AI extractions, direct API integrations with existing legacy ERPs (Xero, SQL Accounting, AutoCount), and dedicated priority support.
+
+### Implementation Roadmap
+*   **Phase 1 (Current)**: High-fidelity MVP simulation. Core Gemini AI extraction engine, Bilingual Mock Portal, and Live Agent Simulator completed.
+*   **Phase 2 (Q3 2026)**: Closed Beta testing with 50 local SMEs. Refining AI extraction prompts based on real-world edge cases and local slang (Manglish).
+*   **Phase 3 (Q4 2026)**: Official certification and integration with the production LHDN MyInvois API.
+*   **Phase 4 (Q1 2027)**: Out-of-the-box integrations with popular accounting software ecosystems and payment gateways.
+
+---
+
 ## Technical Architecture and Data Flow
 
 The architecture consists of a client-side Next.js frontend, backend API routing endpoints, and a PostgreSQL database (configured via Supabase) to log transaction states and agent tool steps.

@@ -56,52 +56,54 @@ const pipelineSteps: PipelineStep[] = [
   {
     number: "02",
     title: "Extract & Structure",
-    shortDesc: "Gemini Vision AI parses unstructured invoice layout into a unified compliance JSON model.",
+    shortDesc: "Gemini Vision autonomously parses raw receipts and maps descriptions to 5-digit MSIC codes.",
     color: "from-teal-500 to-emerald-400",
     icon: Cpu,
     accentBg: "bg-teal-50 dark:bg-teal-900/20",
     accentText: "text-teal-500",
     techDetails: {
-      overview: "LLM extraction isolates header values, buyer company details, tax totals, and item details.",
+      overview: "Our Gemini-powered engine isolates buyer details, maps tax totals to SST codes, and correctly infers official LHDN 5-digit MSIC codes.",
       payloadType: "Structured JSON output",
       payloadCode: `{
   "invoice": "INV-2026-9908",
   "supplier": { "tin": "SG123456789" },
   "items": [
-    { "desc": "Garnier Serum", "price": 126.60 }
+    { "desc": "Garnier Serum", "msic": "47721", "price": 126.60 }
   ]
 }`,
       checklist: [
-        "Multi-line item extraction",
-        "Auto tax rate parsing",
-        "Base currency conversion"
+        "5-digit MSIC code auto-mapping",
+        "SST tax category inference",
+        "Line item structurization"
       ]
     }
   },
   {
     number: "03",
     title: "Validate & Verify",
-    shortDesc: "Real-time compliance checks validating SST rates, company BRN numbers, and UBL 2.1 syntax.",
+    shortDesc: "Enforce strict LHDN Phase 4 rules natively, verifying RM10,000 threshold compliance and UBL 2.1 schema validity.",
     color: "from-purple-500 to-fuchsia-400",
     icon: ShieldCheck,
     accentBg: "bg-purple-50 dark:bg-purple-900/20",
     accentText: "text-purple-500",
     techDetails: {
-      overview: "Runs validation checks against official taxpayer registers and tax mathematical parity rules.",
+      overview: "A bulletproof local compliance gateway that evaluates invoice data against strict Phase 4 B2C consolidated invoice limits (RM10,000 max), State Code 17 constraints, and mathematically verifies all SST formulations.",
       payloadType: "Validation Verdict",
       payloadCode: `{
-  "compliance_score": 98,
+  "compliance_score": 100,
   "status": "ReadyForSubmission",
   "verifications": {
-    "ubl_schema": "PASSED",
-    "sst_math": "PASSED",
-    "buyer_tin": "PASSED"
+    "phase_4_threshold": "PASSED",
+    "state_code_17": "PASSED",
+    "sst_math_integrity": "PASSED",
+    "zero_tax_exemption": "PASSED"
   }
 }`,
       checklist: [
-        "UBL 2.1 XML compliance",
-        "SST mathematical validation",
-        "MSIC merchant matching"
+        "Phase 4 RM10k Consolidation Limits",
+        "State Code 17 Geographical Rules",
+        "Zero-Tax Exemption Integrity",
+        "Precision SST Math Verification"
       ]
     }
   },
@@ -287,14 +289,14 @@ export default function HowItWorksPage() {
                     <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-500 flex items-center justify-center border border-blue-100 dark:border-slate-800">
                       <Globe className="w-6 h-6" />
                     </div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Centralized Web Dashboard</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Accountant Portal (Portal Akauntan)</h3>
                     <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                      Drag & drop individual vendor receipts, upload multi-invoice PDFs, or import batch Excel spreadsheets. The web portal features full validation monitoring and a manual editor to review agent findings.
+                      A dedicated export portal providing auditors and tax agents with month-end consolidated JSON grids, CSV dumps, and instant UBL 2.1 XML retrieval of all validated receipts.
                     </p>
                     <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-                      <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Supports PDF, PNG, JPG, and CSV files</li>
-                      <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Real-time OCR scanning with side-by-side verification</li>
-                      <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Instant PDF download of valid UBL 2.1 XML invoices</li>
+                      <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> One-click UBL 2.1 payload exports</li>
+                      <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> LHDN UUID reference tracking</li>
+                      <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /> Grid-view filtering by compliance status</li>
                     </ul>
                   </motion.div>
                 )}

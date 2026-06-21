@@ -73,7 +73,10 @@ export async function POST(req: NextRequest) {
     // documentData: base64 string or raw text
     // documentMime: optional mime type override (defaults to application/pdf for image type)
 
-    let prompt = `You are a strict LHDN Phase 4 compliance extractor. Extract invoice data into the structured JSON format representing the LHDN required fields.`;
+    let prompt = `You are a Malaysian Tax Auditor. Analyze the items in the receipt/order.
+Map each item to its corresponding 5-digit Malaysia Standard Industrial Classification (MSIC) code (e.g., 23990 for mineral products, 56101 for restaurants, 47111 for provision stores).
+Classify the tax category to standard LHDN codes: '01' (SST 6%/10%), '02' (Service Tax 6%/8%), or 'E' (Exempt).
+Detect if the transaction is a single invoice total >= RM10,000.00.`;
 
     let parts: any[] = [];
     if (documentType === 'image') {
@@ -98,37 +101,14 @@ export async function POST(req: NextRequest) {
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            invoice: {
-              type: Type.OBJECT,
-              properties: {
-                invoice_number: { type: Type.STRING },
-                invoice_type_code: { type: Type.STRING },
-                raw_input_type: { type: Type.STRING },
-                supplier_name: { type: Type.STRING },
-                supplier_tin: { type: Type.STRING },
-                supplier_brn: { type: Type.STRING },
-                supplier_msic_code: { type: Type.STRING },
-                supplier_msic_desc: { type: Type.STRING },
-                supplier_state_code: { type: Type.STRING },
-                supplier_address: { type: Type.STRING },
-                supplier_contact: { type: Type.STRING },
-                supplier_email: { type: Type.STRING },
-                buyer_name: { type: Type.STRING },
-                buyer_tin: { type: Type.STRING },
-                buyer_brn: { type: Type.STRING },
-                buyer_state_code: { type: Type.STRING },
-                buyer_address: { type: Type.STRING },
-                buyer_contact: { type: Type.STRING },
-                buyer_email: { type: Type.STRING },
-                currency_code: { type: Type.STRING },
-                exchange_rate: { type: Type.NUMBER },
-                subtotal: { type: Type.NUMBER },
-                tax_total: { type: Type.NUMBER },
-                total_payable: { type: Type.NUMBER },
-                requires_immediate_submission: { type: Type.BOOLEAN }
-              },
-              required: ["invoice_number", "total_payable", "buyer_tin", "supplier_tin"]
-            },
+            invoice_number: { type: Type.STRING },
+            invoice_type_code: { type: Type.STRING, description: "01=Invoice, 02=Credit Note, 03=Debit Note, 04=Refund" },
+            supplier_name: { type: Type.STRING },
+            supplier_tin: { type: Type.STRING },
+            supplier_brn: { type: Type.STRING },
+            buyer_name: { type: Type.STRING },
+            buyer_tin: { type: Type.STRING },
+            buyer_brn: { type: Type.STRING },
             items: {
               type: Type.ARRAY,
               items: {
@@ -136,17 +116,17 @@ export async function POST(req: NextRequest) {
                 properties: {
                   description: { type: Type.STRING },
                   quantity: { type: Type.NUMBER },
-                  unit_measurement: { type: Type.STRING },
                   unit_price: { type: Type.NUMBER },
                   subtotal: { type: Type.NUMBER },
-                  tax_type: { type: Type.STRING },
+                  tax_type: { type: Type.STRING, description: "'01' | '02' | '03' | 'E' | 'N/A'" },
                   tax_rate: { type: Type.NUMBER },
                   tax_amount: { type: Type.NUMBER },
-                  classification_code: { type: Type.STRING }
+                  classification_code: { type: Type.STRING, description: "Must match standard 5-digit MSIC format" }
                 }
               }
             }
-          }
+          },
+          required: ["items"]
         }
       }
     });
@@ -157,7 +137,17 @@ export async function POST(req: NextRequest) {
     const client = await pool.connect();
     let invoiceId = "";
     try {
-      const inv = extractionResult.invoice || {};
+      const inv = extractionResult || {};
+      const items = inv.items || [];
+      
+      let computedSubtotal = 0;
+      let computedTaxTotal = 0;
+      for (const item of items) {
+        computedSubtotal += sanitizeNum(item.subtotal);
+        computedTaxTotal += sanitizeNum(item.tax_amount);
+      }
+      const computedTotalPayable = computedSubtotal + computedTaxTotal;
+
       let insertSuccess = false;
       let currentInvoiceNumber = inv.invoice_number || `INV-${Date.now()}`;
       let attempts = 0;
@@ -178,12 +168,13 @@ export async function POST(req: NextRequest) {
             ) RETURNING id
           `, [
             currentInvoiceNumber, inv.invoice_type_code || '01', documentType === 'image' ? 'pdf_upload' : 'whatsapp',
-            inv.supplier_name || 'Extracted Vendor', inv.supplier_tin || 'C1234567890', inv.supplier_brn || '00000', inv.supplier_msic_code || '00000', inv.supplier_msic_desc || 'General',
-            inv.supplier_state_code || '14', inv.supplier_address || 'KL', inv.supplier_contact || '000', inv.supplier_email || 'vendor@example.com',
-            inv.buyer_name || 'General Public', inv.buyer_tin || 'EI00000000010', inv.buyer_brn || '000000000000', inv.buyer_state_code || '17', inv.buyer_address || '-',
-            inv.buyer_contact || '-', inv.buyer_email || '-',
-            inv.currency_code || 'MYR', sanitizeNum(inv.exchange_rate) || 1.0, sanitizeNum(inv.subtotal), sanitizeNum(inv.tax_total), sanitizeNum(inv.total_payable),
-            'Pending Extraction', inv.requires_immediate_submission || false
+            inv.supplier_name || 'Extracted Vendor', inv.supplier_tin || 'C1234567890', inv.supplier_brn || '00000', '00000', 'General',
+            '14', 'KL', '000', 'vendor@example.com',
+            inv.buyer_name || 'General Public', inv.buyer_tin || 'EI00000000010', inv.buyer_brn || '000000000000', 
+            (inv.buyer_tin && inv.buyer_tin !== 'EI00000000010') ? '14' : '17', '-',
+            '-', '-',
+            'MYR', 1.0, computedSubtotal, computedTaxTotal, computedTotalPayable,
+            'Pending Extraction', computedTotalPayable >= 10000
           ]);
           invoiceId = res.rows[0].id;
           insertSuccess = true;
@@ -202,7 +193,6 @@ export async function POST(req: NextRequest) {
         throw new Error("Failed to insert invoice record due to persistent unique constraint violations.");
       }
 
-      const items = extractionResult.items || [];
       // Allowable tax_type values per schema CHECK constraint
       const VALID_TAX_TYPES = ['01', '02', '03', 'E', 'N/A'];
       for (const item of items) {
@@ -236,11 +226,26 @@ export async function POST(req: NextRequest) {
     // Log the write operation
     await logMCPTool(invoiceId, 'supabase-db-mcp', 'write_invoice_record', 'Success', extractionResult, { invoice_id: invoiceId });
 
-    // 2. Validate Phase 4 Limits via MCP call
-    const valRes = await callMCP('lhdn-validator-mcp', 'validate_ubl_invoice', { invoice: extractionResult.invoice || {} }, invoiceId);
+    // 2. Validate Phase 4 Limits via new API endpoint
+    // We fetch the newly inserted invoice to get full data for validation
+    const fullInvRes = await pool.query('SELECT * FROM invoices WHERE id = $1', [invoiceId]);
+    const fullInv = fullInvRes.rows[0];
+    
+    // Call the external compliance guardrail endpoint we are building
+    const validationUrl = new URL('/api/lhdn-sandbox/v1.1/documents/submissions', req.nextUrl.origin).toString();
+    const valResRaw = await fetch(validationUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        invoiceId,
+        invoice: fullInv,
+        items: extractionResult.items || []
+      })
+    });
+    const valRes = await valResRaw.json();
 
-    let lhdnStatus = valRes.result?.status || 'Validation Failed';
-    let valErrors = valRes.result?.errors || null;
+    let lhdnStatus = valRes.status || 'Validation Failed';
+    let valErrors = valRes.errors || null;
 
     // 3. Generate QR via MCP call
     const qrRes = await callMCP('lhdn-validator-mcp', 'generate_lhdn_qr', { uuid: invoiceId, origin: req.nextUrl.origin }, invoiceId);

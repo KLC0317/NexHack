@@ -38,8 +38,8 @@ const TOOL_CY = 302;
 const TOOL_DEFS = [
   { id: "extractor", label: "extract_invoice_fields", mcp: "Gemini Vision", Icon: Cpu, tcx: 242, dcx: 388 },
   { id: "dbWriter", label: "write_invoice_record", mcp: "supabase-db-mcp", Icon: Database, tcx: 370, dcx: 422 },
-  { id: "validator", label: "validate_ubl_invoice", mcp: "lhdn-validator", Icon: Shield, tcx: 498, dcx: 460 },
-  { id: "qrSigner", label: "generate_lhdn_qr", mcp: "lhdn-validator", Icon: QrCode, tcx: 626, dcx: 496 },
+  { id: "validator", label: "validateLHDNCompliance", mcp: "lhdn-sandbox", Icon: Shield, tcx: 498, dcx: 460 },
+  { id: "qrSigner", label: "generate_lhdn_qr", mcp: "lhdn-validator-mcp", Icon: QrCode, tcx: 626, dcx: 496 },
 ];
 
 // State-based color helpers
@@ -489,9 +489,9 @@ export default function LiveDemoPage() {
       await sleep(1000);
 
       // 5. Validator Invocation
-      const valLog = logsData.find((l: any) => l.tool_name === "validate_ubl_invoice" && l.status !== "Invoked");
+      const valLog = logsData.find((l: any) => l.tool_name === "validateLHDNCompliance" && l.status !== "Invoked");
       setToolStates(p => ({ ...p, validator: "active" }));
-      setCurrentStep("AI Agent: Dispatching validate_ubl_invoice to lhdn-validator...");
+      setCurrentStep("AI Agent: Dispatching validateLHDNCompliance to lhdn-sandbox...");
       await sleep(1200);
 
       let isValSuccess = true;
@@ -499,29 +499,29 @@ export default function LiveDemoPage() {
         isValSuccess = valLog.status === "Success";
         setToolStates(p => ({ ...p, validator: isValSuccess ? "completed" : "failed" }));
         if (isValSuccess) {
-          setCurrentStep("lhdn-validator: Invoice validation passed (Phase 4 rules compliant).");
+          setCurrentStep("lhdn-sandbox: Invoice validation passed (Phase 4 rules compliant).");
         } else {
-          setCurrentStep("lhdn-validator: Validation failed (Phase 4 RM10,000 threshold check failed).");
+          setCurrentStep("lhdn-sandbox: Validation failed (Phase 4 limits or State Code errors).");
         }
       } else {
         setToolStates(p => ({ ...p, validator: "completed" }));
-        setCurrentStep("lhdn-validator: Invoice validation passed.");
+        setCurrentStep("lhdn-sandbox: Invoice validation passed.");
       }
       await sleep(1000);
 
       // 6. QR Signer Invocation
       const qrLog = logsData.find((l: any) => l.tool_name === "generate_lhdn_qr" && l.status !== "Invoked");
       setToolStates(p => ({ ...p, qrSigner: "active" }));
-      setCurrentStep("AI Agent: Dispatching generate_lhdn_qr to lhdn-validator...");
+      setCurrentStep("AI Agent: Dispatching generate_lhdn_qr to lhdn-validator-mcp...");
       await sleep(1200);
 
       if (qrLog) {
         const isQrSuccess = qrLog.status === "Success";
         setToolStates(p => ({ ...p, qrSigner: isQrSuccess ? "completed" : "failed" }));
-        setCurrentStep(isQrSuccess ? "lhdn-validator: Signed invoice and generated LHDN QR code." : "lhdn-validator: QR generation failed.");
+        setCurrentStep(isQrSuccess ? "lhdn-validator-mcp: Signed invoice and generated LHDN QR code." : "lhdn-validator-mcp: QR generation failed.");
       } else {
         setToolStates(p => ({ ...p, qrSigner: "completed" }));
-        setCurrentStep("lhdn-validator: Signed invoice and generated LHDN QR code.");
+        setCurrentStep("lhdn-validator-mcp: Signed invoice and generated LHDN QR code.");
       }
       await sleep(1000);
 
@@ -684,12 +684,28 @@ export default function LiveDemoPage() {
 
             {/* WhatsApp */}
             {inputType === "whatsapp" && (
-              <textarea
-                className="w-full h-[120px] p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none resize-none placeholder:text-slate-400 text-xs leading-relaxed"
-                placeholder={"e.g. From: Apex Supplies\nItem: Nasi Lemak x2 – RM 15.00\nSST: 8%\nTotal: RM 16.20"}
-                value={whatsappText}
-                onChange={(e) => setWhatsappText(e.target.value)}
-              />
+              <div className="space-y-3">
+                <textarea
+                  className="w-full h-[120px] p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 outline-none resize-none placeholder:text-slate-400 text-xs leading-relaxed"
+                  placeholder={"e.g. From: Apex Supplies\nItem: Nasi Lemak x2 – RM 15.00\nSST: 8%\nTotal: RM 16.20"}
+                  value={whatsappText}
+                  onChange={(e) => setWhatsappText(e.target.value)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button 
+                    onClick={() => setWhatsappText("Hi Tan, please send 50 bags of grade A cement (RM250 each) and 10 boxes of steel nails (RM45 each) to the Puchong construction site. \nBill to: Pembinaan Jaya Sdn Bhd. \nBRN: 202101034567. \nBuyer TIN: C234567890.")}
+                    className="text-[10px] font-medium bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200/50 dark:border-slate-700/50"
+                  >
+                    Sample: Valid B2B Order
+                  </button>
+                  <button 
+                    onClick={() => setWhatsappText("Cash Sale. \nItem: 200 sheets of industrial glass roof panels @ RM75.00 each. \nTotal: RM15,000.00. \nBill to: General Public (Cash Customer).\nTIN: EI00000000010")}
+                    className="text-[10px] font-medium bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200/50 dark:border-slate-700/50"
+                  >
+                    Sample: RM15k Consolidation Violation
+                  </button>
+                </div>
+              </div>
             )}
 
             {/* Execute button */}
@@ -906,12 +922,12 @@ export default function LiveDemoPage() {
                 {[
                   {
                     title: "Supplier", color: "text-sky-600 dark:text-sky-400", fields: [
-                      { label: "Name", key: "supplier_name" }, { label: "TIN", key: "supplier_tin", mono: true }, { label: "BRN", key: "supplier_brn", mono: true },
+                      { label: "Name", key: "supplier_name" }, { label: "TIN", key: "supplier_tin", mono: true }, { label: "BRN", key: "supplier_brn", mono: true }, { label: "State Code", key: "supplier_state_code", mono: true },
                     ]
                   },
                   {
                     title: "Buyer", color: "text-teal-600 dark:text-teal-400", fields: [
-                      { label: "Name", key: "buyer_name" }, { label: "TIN", key: "buyer_tin", mono: true }, { label: "BRN", key: "buyer_brn", mono: true },
+                      { label: "Name", key: "buyer_name" }, { label: "TIN", key: "buyer_tin", mono: true }, { label: "BRN", key: "buyer_brn", mono: true }, { label: "State Code", key: "buyer_state_code", mono: true },
                     ]
                   },
                 ].map(({ title, color, fields }) => (
@@ -942,6 +958,7 @@ export default function LiveDemoPage() {
                     <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 text-slate-500 uppercase">
                       <tr>
                         <th className="px-3 py-2.5 text-left font-bold tracking-wider">Description</th>
+                        <th className="px-3 py-2.5 w-20">MSIC</th>
                         <th className="px-3 py-2.5 text-center w-14">Qty</th>
                         <th className="px-3 py-2.5 w-24">Unit Price</th>
                         <th className="px-3 py-2.5 w-16">SST %</th>
@@ -953,6 +970,7 @@ export default function LiveDemoPage() {
                       {extractedItems.map((item, idx) => (
                         <tr key={idx} className="bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                           <td className="px-2 py-2"><input type="text" className="w-full px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 focus:border-sky-400 outline-none text-xs" value={item.description || ""} onChange={(e) => { const n = [...extractedItems]; n[idx].description = e.target.value; setExtractedItems(n); }} /></td>
+                          <td className="px-2 py-2"><input type="text" className="w-full px-2 py-1.5 text-center font-mono rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 focus:border-sky-400 outline-none text-xs" value={item.classification_code || ""} onChange={(e) => { const n = [...extractedItems]; n[idx].classification_code = e.target.value; setExtractedItems(n); }} placeholder="MSIC" /></td>
                           <td className="px-2 py-2"><input type="number" className="w-full px-2 py-1.5 text-center rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 focus:border-sky-400 outline-none text-xs" value={item.quantity || 0} onChange={(e) => { const n = [...extractedItems]; n[idx].quantity = parseFloat(e.target.value) || 0; n[idx].subtotal = n[idx].quantity * n[idx].unit_price; n[idx].tax_amount = n[idx].subtotal * (n[idx].tax_rate / 100); setExtractedItems(n); }} /></td>
                           <td className="px-2 py-2"><input type="number" step="0.01" className="w-full px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 focus:border-sky-400 outline-none text-xs" value={item.unit_price || 0} onChange={(e) => { const n = [...extractedItems]; n[idx].unit_price = parseFloat(e.target.value) || 0; n[idx].subtotal = n[idx].quantity * n[idx].unit_price; n[idx].tax_amount = n[idx].subtotal * (n[idx].tax_rate / 100); setExtractedItems(n); }} /></td>
                           <td className="px-2 py-2"><input type="number" className="w-full px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 focus:border-sky-400 outline-none text-xs" value={item.tax_rate || 0} onChange={(e) => { const n = [...extractedItems]; n[idx].tax_rate = parseFloat(e.target.value) || 0; n[idx].tax_amount = n[idx].subtotal * (n[idx].tax_rate / 100); setExtractedItems(n); }} /></td>
