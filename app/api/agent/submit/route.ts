@@ -65,14 +65,6 @@ export async function POST(req: NextRequest) {
     try {
       const inv = invoice || {};
       const invItems = items || [];
-      
-      let computedSubtotal = 0;
-      let computedTaxTotal = 0;
-      for (const item of invItems) {
-        computedSubtotal += sanitizeNum(item.subtotal);
-        computedTaxTotal += sanitizeNum(item.tax_amount);
-      }
-      const computedTotalPayable = computedSubtotal + computedTaxTotal;
 
       let insertSuccess = false;
       let currentInvoiceNumber = inv.invoice_number || `INV-${Date.now()}`;
@@ -93,14 +85,32 @@ export async function POST(req: NextRequest) {
               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
             ) RETURNING id
           `, [
-            currentInvoiceNumber, inv.invoice_type_code || '01', documentType === 'image' ? 'pdf_upload' : 'whatsapp',
-            inv.supplier_name || 'Extracted Vendor', inv.supplier_tin || 'C1234567890', inv.supplier_brn || '00000', '00000', 'General',
-            '14', 'KL', '000', 'vendor@example.com',
-            inv.buyer_name || 'General Public', inv.buyer_tin || 'EI00000000010', inv.buyer_brn || '000000000000', 
-            (inv.buyer_tin && inv.buyer_tin !== 'EI00000000010') ? '14' : '17', '-',
-            '-', '-',
-            'MYR', 1.0, computedSubtotal, computedTaxTotal, computedTotalPayable,
-            'Pending Extraction', computedTotalPayable >= 10000
+            currentInvoiceNumber,
+            inv.invoice_type_code || '01',
+            documentType === 'image' ? 'pdf_upload' : 'whatsapp',
+            inv.supplier_name || 'Extracted Vendor',
+            inv.supplier_tin || 'C1234567890',
+            inv.supplier_brn || '00000',
+            inv.supplier_msic_code || '00000',
+            inv.supplier_msic_desc || 'General',
+            inv.supplier_state_code || '14',
+            inv.supplier_address || 'KL',
+            inv.supplier_contact || '000',
+            inv.supplier_email || 'vendor@example.com',
+            inv.buyer_name || 'General Public',
+            inv.buyer_tin || 'EI00000000010',
+            inv.buyer_brn || '000000000000',
+            inv.buyer_state_code || ((inv.buyer_tin && inv.buyer_tin !== 'EI00000000010') ? '14' : '17'),
+            inv.buyer_address || '-',
+            inv.buyer_contact || '-',
+            inv.buyer_email || '-',
+            inv.currency_code || 'MYR',
+            parseFloat(inv.exchange_rate || 1.0),
+            parseFloat(inv.subtotal || 0),
+            parseFloat(inv.tax_total || 0),
+            parseFloat(inv.total_payable || 0),
+            'Pending Extraction',
+            parseFloat(inv.total_payable || 0) >= 10000
           ]);
           invoiceId = res.rows[0].id;
           insertSuccess = true;
@@ -154,7 +164,7 @@ export async function POST(req: NextRequest) {
     // 2. Validate Phase 4 Limits
     const fullInvRes = await pool.query('SELECT * FROM invoices WHERE id = $1', [invoiceId]);
     const fullInv = fullInvRes.rows[0];
-    
+
     const validationUrl = new URL('/api/lhdn-sandbox/v1.1/documents/submissions', req.nextUrl.origin).toString();
     const valResRaw = await fetch(validationUrl, {
       method: "POST",
