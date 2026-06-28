@@ -131,7 +131,7 @@ export default function IntegrationsPage() {
                 <button 
                   onClick={handleTestConnection}
                   disabled={isTesting || !clientId || (!clientSecret1 && !clientSecret2)}
-                  className="px-5 py-2.5 rounded-[8px] border border-slate-300 dark:border-slate-700 text-[14px] font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center shadow-xs"
+                  className="px-5 py-2.5 rounded-[8px] border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[14px] font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center shadow-xs"
                 >
                   {isTesting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                   Test Connection

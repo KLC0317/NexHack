@@ -4,9 +4,20 @@ import * as React from "react"
 import { Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { motion } from "framer-motion"
 
 export function Navbar() {
   const { setTheme, theme } = useTheme()
+  const pathname = usePathname()
+
+  const navLinks = [
+    { href: "/", label: "Home" },
+    { href: "/how-it-works", label: "How It Works" },
+    { href: "/demo", label: "Agent Simulator" },
+    { href: "/integrations", label: "Connect to LHDN" },
+    { href: "/accountant", label: "Accountant Portal" },
+  ]
 
   return (
     <nav className="font-ubuntu border-b border-slate-200 dark:border-slate-800/50 bg-[#F0F4F8]/80 dark:bg-slate-950/80 backdrop-blur-md supports-[backdrop-filter]:bg-[#F0F4F8]/60 dark:supports-[backdrop-filter]:bg-slate-950/60 flex items-center justify-between px-6 py-4 sticky top-0 z-50 transition-colors">
@@ -16,12 +27,31 @@ export function Navbar() {
           <span className="font-bold text-xl tracking-tight text-slate-900 dark:text-white">MyInvoisAI</span>
         </Link>
 
-        <div className="hidden md:flex items-center space-x-6 text-sm font-medium">
-          <Link href="/" className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors">Home</Link>
-          <Link href="/how-it-works" className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors">How It Works</Link>
-          <Link href="/demo" className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors">Agent Simulator</Link>
-          <Link href="/integrations" className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors">Connect to LHDN</Link>
-          <Link href="/accountant" className="text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400 transition-colors">Accountant Portal</Link>
+        <div className="hidden md:flex items-center space-x-2 text-sm font-medium">
+          {navLinks.map((link) => {
+            const isActive = pathname === link.href;
+            return (
+              <Link 
+                key={link.href}
+                href={link.href} 
+                className={`relative px-4 py-2 rounded-full transition-colors duration-300 ${
+                  isActive 
+                    ? "text-blue-700 dark:text-blue-300 font-semibold" 
+                    : "text-slate-600 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400"
+                }`}
+              >
+                {link.label}
+                {isActive && (
+                  <motion.div
+                    layoutId="navbar-active-pill"
+                    className="absolute inset-0 bg-blue-100/80 dark:bg-blue-900/40 rounded-full -z-10"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                )}
+              </Link>
+            )
+          })}
         </div>
       </div>
 
